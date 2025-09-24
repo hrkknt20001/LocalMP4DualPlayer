@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ローカルMP4 2画面プレイヤー</title>
+  <style>
+    body{font-family:system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", Arial; margin:20px}
+    .wrapper{display:flex;gap:16px;flex-wrap:wrap}
+    .player{flex:1 1 480px;border:1px solid #ddd;padding:12px;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,0.05)}
+    video{width:100%;background:#000;border-radius:6px}
+    .controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:center}
+    .controls button{padding:6px 10px}
+    .time{min-width:120px}
+    label{font-size:13px}
+    input[type=file]{display:inline-block}
+    .global{margin-top:14px}
+  </style>
+</head>
+<body>
+  <h2>ローカルMP4 2画面プレイヤー</h2>
+  <p>ローカルにあるMP4ファイルを選んで、2つ同時に再生できます。コマ送り／コマ戻しはFPSを指定して実行します（デフォルト30fps）。</p>
+
+  <div class="wrapper">
+    <!-- プレイヤーA -->
+    <div class="player" id="playerA">
+      <h3>A</h3>
+      <video id="videoA" controls preload="metadata"></video>
+      <div class="controls">
+        <input type="file" id="fileA" accept="video/mp4,video/*">
+        <button id="playA">再生 ▶</button>
+        <button id="stopA">停止 ■</button>
+        <button id="stepBackA">◀ コマ戻し</button>
+        <button id="stepFwdA">コマ送り ▶</button>
+        <label>FPS: <input id="fpsA" type="number" min="1" value="30" style="width:72px"></label>
+        <div class="time" id="timeA">00:00 / 00:00</div>
+        <input type="range" id="seekA" min="0" max="100" value="0" style="flex:1">
+      </div>
+    </div>
+
+    <!-- プレイヤーB -->
+    <div class="player" id="playerB">
+      <h3>B</h3>
+      <video id="videoB" controls preload="metadata"></video>
+      <div class="controls">
+        <input type="file" id="fileB" accept="video/mp4,video/*">
+        <button id="playB">再生 ▶</button>
+        <button id="stopB">停止 ■</button>
+        <button id="stepBackB">◀ コマ戻し</button>
+        <button id="stepFwdB">コマ送り ▶</button>
+        <label>FPS: <input id="fpsB" type="number" min="1" value="30" style="width:72px"></label>
+        <div class="time" id="timeB">00:00 / 00:00</div>
+        <input type="range" id="seekB" min="0" max="100" value="0" style="flex:1">
+      </div>
+    </div>
+  </div>
+
+  <div class="global">
+    <button id="playBoth">両方再生 ▶</button>
+    <button id="pauseBoth">両方一時停止 ⏸</button>
+    <button id="stopBoth">両方停止 ■</button>
+    <button id="stepBackBoth">両方コマ戻し ◀</button>
+    <button id="stepFwdBoth">両方コマ送り ▶</button>
+  </div>
+
+  <script>
+    // ヘルパー
+    function formatTime(t){
+      if (!isFinite(t)) return '00:00';
+      const h = Math.floor(t/3600);
+      const m = Math.floor((t%3600)/60).toString().padStart(2,'0');
+      const s = (t%60).toFixed(2).padStart(5,'0');
+      return (h>0? h+':':'') + m + ':' + s;
+    }
+
+    function setupPlayer(prefix){
+      const video = document.getElementById('video'+prefix);
+      const file = document.getElementById('file'+prefix);
+      const playBtn = document.getElementById('play'+prefix);
+      const stopBtn = document.getElementById('stop'+prefix);
+      const stepBack = document.getElementById('stepBack'+prefix);
+      const stepFwd = document.getElementById('stepFwd'+prefix);
+      const fpsInput = document.getElementById('fps'+prefix);
+      const timeEl = document.getElementById('time'+prefix);
+      const seek = document.getElementById('seek'+prefix);
+
+      let objectUrl = null;
+
+      file.addEventListener('change', ()=>{
+        const f = file.files && file.files[0];
+        if(!f) return;
+        if(objectUrl){ URL.revokeObjectURL(objectUrl); objectUrl = null; }
+        objectUrl = URL.createObjectURL(f);
+        video.src = objectUrl;
+        video.load();
+      });
+
+      playBtn.addEventListener('click', ()=>{
+        if(video.paused) video.play(); else video.pause();
+        updatePlayButton();
+      });
+
+      stopBtn.addEventListener('click', ()=>{
+        video.pause();
+        video.currentTime = 0;
+        updatePlayButton();
+      });
+
+      stepBack.addEventListener('click', ()=>{
+        stepFrames(video, -1 * Math.max(1, parseFloat(fpsInput.value)||30));
+      });
+      stepFwd.addEventListener('click', ()=>{
+        stepFrames(video, Math.max(1, parseFloat(fpsInput.value)||30));
+      });
+
+      // シークバー連動
+      video.addEventListener('timeupdate', ()=>{
+        updateTime();
+      });
+      video.addEventListener('loadedmetadata', ()=>{
+        updateTime();
+      });
+
+      seek.addEventListener('input', ()=>{
+        if(video.duration) video.currentTime = (seek.value/100) * video.duration;
+      });
+
+      function updateTime(){
+        const cur = video.currentTime;
+        const dur = video.duration || 0;
+        timeEl.textContent = formatTime(cur) + ' / ' + formatTime(dur);
+        if(dur>0) seek.value = (cur/dur)*100;
+        updatePlayButton();
+      }
+
+      function updatePlayButton(){
+        playBtn.textContent = video.paused ? '再生 ▶' : '一時停止 ⏸';
+      }
+
+      // フレーム単位の移動
+      function stepFrames(videoEl, framesPerSec){
+        const fps = Math.abs(framesPerSec) || 30;
+        const framesToMove = framesPerSec>0 ? 1 : -1;
+        const dt = framesToMove / fps;
+        const next = Math.min(Math.max(0, videoEl.currentTime + dt), videoEl.duration || Infinity);
+        videoEl.pause();
+        videoEl.currentTime = next;
+      }
+
+      ['dragenter','dragover','dragleave','drop'].forEach(ev=>{
+        video.addEventListener(ev, (e)=>{ e.preventDefault(); e.stopPropagation(); }, false);
+      });
+      video.addEventListener('drop', (e)=>{
+        const f = e.dataTransfer.files && e.dataTransfer.files[0];
+        if(!f) return;
+        if(objectUrl){ URL.revokeObjectURL(objectUrl); objectUrl = null; }
+        objectUrl = URL.createObjectURL(f);
+        video.src = objectUrl; video.load();
+      });
+
+      return {
+        video, playBtn, stopBtn, fpsInput, stepFrames
+      };
+    }
+
+    const A = setupPlayer('A');
+    const B = setupPlayer('B');
+
+    // 両方コントロール
+    document.getElementById('playBoth').addEventListener('click', ()=>{
+      if(A.video) A.video.play();
+      if(B.video) B.video.play();
+    });
+    document.getElementById('pauseBoth').addEventListener('click', ()=>{
+      if(A.video) A.video.pause();
+      if(B.video) B.video.pause();
+    });
+    document.getElementById('stopBoth').addEventListener('click', ()=>{
+      if(A.video){ A.video.pause(); A.video.currentTime = 0; }
+      if(B.video){ B.video.pause(); B.video.currentTime = 0; }
+    });
+
+    document.getElementById('stepBackBoth').addEventListener('click', ()=>{
+      if(A.video) A.stepFrames(A.video, -1 * Math.max(1, parseFloat(A.fpsInput.value)||30));
+      if(B.video) B.stepFrames(B.video, -1 * Math.max(1, parseFloat(B.fpsInput.value)||30));
+    });
+    document.getElementById('stepFwdBoth').addEventListener('click', ()=>{
+      if(A.video) A.stepFrames(A.video, Math.max(1, parseFloat(A.fpsInput.value)||30));
+      if(B.video) B.stepFrames(B.video, Math.max(1, parseFloat(B.fpsInput.value)||30));
+    });
+
+    // キーボードショートカット
+    window.addEventListener('keydown', (e)=>{
+      if(e.key==='1') A.video && A.video.paused ? A.video.play() : A.video && A.video.pause();
+      if(e.key==='2') B.video && B.video.paused ? B.video.play() : B.video && B.video.pause();
+      if(e.key==='q') stepKey(A.video, A.fpsInput, -1);
+      if(e.key==='w') stepKey(B.video, B.fpsInput, -1);
+      if(e.key==='e') stepKey(A.video, A.fpsInput, +1);
+      if(e.key==='r') stepKey(B.video, B.fpsInput, +1);
+      if(e.key==='a') { // 両方コマ戻し
+        if(A.video) stepKey(A.video, A.fpsInput, -1);
+        if(B.video) stepKey(B.video, B.fpsInput, -1);
+      }
+      if(e.key==='s') { // 両方コマ送り
+        if(A.video) stepKey(A.video, A.fpsInput, +1);
+        if(B.video) stepKey(B.video, B.fpsInput, +1);
+      }
+    });
+
+    function stepKey(videoEl, fpsInput, dir){
+      if(!videoEl) return;
+      const fps = Math.max(1, parseFloat(fpsInput.value)||30);
+      const framesToMove = dir>0 ? 1 : -1;
+      videoEl.pause();
+      videoEl.currentTime = Math.min(Math.max(0, videoEl.currentTime + framesToMove/fps), videoEl.duration || Infinity);
+    }
+
+  </script>
+</body>
+</html>
