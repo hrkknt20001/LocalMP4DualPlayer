@@ -6,7 +6,8 @@
   <title>ローカルMP4 2画面プレイヤー</title>
   <style>
     body{font-family:system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", Arial; margin:20px}
-    .wrapper{display:flex;gap:16px;flex-wrap:wrap}
+    .wrapper1{display:flex;gap:16px;flex-wrap:wrap}
+    .wrapper2{display:flex;gap:16px;flex-wrap:wrap}
     .player{flex:1 1 480px;border:1px solid #ddd;padding:12px;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,0.05)}
     video{width:100%;background:#000;border-radius:6px}
     .controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:center}
@@ -21,7 +22,10 @@
   <h2>ローカルMP4 2画面プレイヤー</h2>
   <p>ローカルにあるMP4ファイルを選んで、2つ同時に再生できます。コマ送り／コマ戻しはFPSを指定して実行します（デフォルト30fps）。</p>
 
-  <div class="wrapper">
+  <div class="display_ctrl">
+    <input type="checkbox" id="display_ctrl" >Video C/D 表示
+  </div>
+  <div class="wrapper1" id="wrapper1">
     <!-- プレイヤーA -->
     <div class="player" id="playerA">
       <h3>A</h3>
@@ -55,6 +59,40 @@
     </div>
   </div>
 
+  <div class="wrapper2" id="wrapper2">
+    <!-- プレイヤーC -->
+    <div class="player" id="playerC">
+      <h3>C</h3>
+      <video id="videoC" controls preload="metadata"></video>
+      <div class="controls">
+        <input type="file" id="fileC" accept="video/mp4,video/*">
+        <button id="playC">再生 ▶</button>
+        <button id="stopC">停止 ■</button>
+        <button id="stepBackC">◀ コマ戻し</button>
+        <button id="stepFwdC">コマ送り ▶</button>
+        <label>FPS: <input id="fpsC" type="number" min="1" value="30" style="width:72px"></label>
+        <div class="time" id="timeC">00:00 / 00:00</div>
+        <input type="range" id="seekC" min="0" max="100" value="0" style="flex:1">
+      </div>
+    </div>
+
+    <!-- プレイヤーD -->
+    <div class="player" id="playerD">
+      <h3>D</h3>
+      <video id="videoD" controls preload="metadata"></video>
+      <div class="controls">
+        <input type="file" id="fileD" accept="video/mp4,video/*">
+        <button id="playD">再生 ▶</button>
+        <button id="stopD">停止 ■</button>
+        <button id="stepBackD">◀ コマ戻し</button>
+        <button id="stepFwdD">コマ送り ▶</button>
+        <label>FPS: <input id="fpsD" type="number" min="1" value="30" style="width:72px"></label>
+        <div class="time" id="timeD">00:00 / 00:00</div>
+        <input type="range" id="seekD" min="0" max="100" value="0" style="flex:1">
+      </div>
+    </div>
+  </div>
+
   <div class="global">
     <button id="playBoth">両方再生 ▶</button>
     <button id="pauseBoth">両方一時停止 ⏸</button>
@@ -64,6 +102,20 @@
   </div>
 
   <script>
+    const checkbox = document.getElementById('display_ctrl');
+    // 対象の要素を取得
+    const targetElement = document.getElementById('wrapper2');
+
+    // チェックボックスの状態が変化したときのイベントリスナーを設定
+    checkbox.addEventListener('change', function() {
+        // チェック状態を判定し、要素のdisplayプロパティを変更
+        if (checkbox.checked) {
+            targetElement.style.display = 'flex'; // または 'inline' など
+        } else {
+            targetElement.style.display = 'none';
+        }
+    });
+
     // ヘルパー
     function formatTime(t){
       if (!isFinite(t)) return '00:00';
@@ -165,6 +217,8 @@
 
     const A = setupPlayer('A');
     const B = setupPlayer('B');
+    const C = setupPlayer('C');
+    const D = setupPlayer('D');
 
     // 両方コントロール
     document.getElementById('playBoth').addEventListener('click', ()=>{
